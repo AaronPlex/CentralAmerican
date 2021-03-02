@@ -1,0 +1,330 @@
+---
+title: "FAO Trade network for Berea 01152021"
+author: "Yanru Xing"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: true
+    df_print: paged
+---
+
+
+# World trade network: FAO POTATO TRADE 2015-2019
+
+```{r, fig.width= 12, fig.height= 14, dpi=80}
+library(igraph)
+library(tidyverse)
+library(viridis)
+library(scales)
+#library(devtools)
+#install_github("GarrettLab/INApreliminary", force = TRUE)
+library(INApreliminary)
+library(rworldmap)
+
+library(sf)
+library(tmap)
+library(raster)
+
+palette1 <- rev(viridis_pal(option = "B")(1000))
+
+colid<-c(1:100)*10
+colid <- c(1, colid )
+palette1<-palette1[colid]
+#----------------------------------------------
+library(rgdal)
+colPalletNew <- c( "#F4E156FF", "#F6D746FF", "#F8CD37FF", "#FAC329FF", "#FBB91EFF", "#FCAF13FF", 
+                   "#FCA50BFF", "#FB9C06FF", "#FA9207FF", "#F8890CFF", "#F68013FF", "#F37819FF",
+                   "#F06F20FF", "#EC6727FF", "#E85F2EFF", "#E25834FF", "#DD5139FF", "#D74B3FFF",
+                   "#D04545FF", "#CA404AFF", "#C33B4FFF", "#BC3754FF", "#B43359FF", "#AC305EFF",
+                   "#A42C60FF", "#9B2964FF", "#932667FF", "#922568FF", "#902568FF", "#8F2469FF",
+                   "#8D2369FF", "#8C2369FF", "#8A226AFF", "#88226AFF", "#87216BFF", "#85216BFF",
+                   "#84206BFF", "#82206CFF", "#801F6CFF", "#7F1E6CFF", "#7D1E6DFF", "#7C1D6DFF",
+                   "#7A1D6DFF", "#781C6DFF", "#771C6DFF", "#751B6EFF", "#741A6EFF", "#721A6EFF",
+                   "#71196EFF", "#6E196EFF", "#6D186EFF", "#6B186EFF", "#6A176EFF", "#68166EFF",
+                   "#66166EFF", "#65156EFF", "#63156EFF", "#61136EFF", "#60136EFF", "#5E126EFF",
+                   "#5C126EFF", "#5B126EFF", "#59106EFF", "#58106EFF", "#560F6DFF", "#540F6DFF",
+                   "#530E6DFF", "#510E6CFF", "#500D6CFF", "#4D0D6CFF", "#4C0C6BFF", "#4A0C6BFF",
+                   "#490B6AFF", "#470B6AFF", "#450A69FF", "#440A68FF", "#420A68FF", "#400A67FF",
+                   "#3E0966FF", "#3D0965FF", "#3B0964FF", "#390963FF", "#380962FF", "#360961FF",
+                   "#340A5FFF", "#320A5EFF", "#310A5CFF", "#2F0A5BFF", "#2D0B59FF", "#2B0B57FF",
+                   "#290B55FF", "#280B53FF", "#250C51FF", "#240C4EFF", "#230C4BFF", "#200C49FF",
+                   "#1F0C47FF", "#1D0C44FF", "#1C0C42FF", "#1A0C40FF", "#190C3DFF", "#170C3BFF",
+                   "#150B38FF", "#150B36FF", "#130A33FF", "#110A31FF", "#11092EFF", "#0F092CFF",
+                   "#0D082AFF", "#0C0827FF", "#0B0725FF", "#0A0723FF", "#090620FF", "#08051EFF",
+                   "#07051CFF", "#060419FF", "#050418FF", "#040315FF", "#040312FF", "#030210FF",
+                   "#02020EFF", "#02020CFF", "#02010AFF", "#010108FF", "#010106FF", "#010005FF",
+                   "#000004FF", "#000004FF", "#000004FF")
+#---------------------------------------------  
+```
+
+# World trade network
+
+```{r, fig.width=14, fig.height=8, dpi=80}
+
+
+# World trade network
+TradeFAOSTAT <- read.csv("PotatoWorldFAOdata2015_2019meanExportTradeQuantityV1_GIS.csv")
+head(TradeFAOSTAT)
+#-----------------------------------------------
+countriesNodes <- read.csv("countriesNodes v2.csv")
+#-----------------------------------------------
+countriesNodes <- countriesNodes[, -1]
+#-----------------------------------------------
+Edge1 <- data.frame(from = TradeFAOSTAT$Reporter.Countries, to = TradeFAOSTAT$Partner.Countries, value = TradeFAOSTAT$Value)
+g <- graph_from_data_frame(Edge1, vertices = countriesNodes, directed = TRUE)
+#---------------------------------------------
+map_grey_background <- raster("map_grey_background.tif")  
+
+bananaPlantain <- raster("Mean cropland connectivity risk index from sensitivity analysis_potato.tif")
+plot(map_grey_background, col = "grey75",  xaxt='n',  yaxt='n', axes=F, box=F, legend = F,
+          main=paste('Mean cropland connectivity risk index from sensitivity analysis: potato'), cex.main=1.9)
+plot(bananaPlantain, col = colPalletNew, zlim= c(0.000000000001, 1), xaxt='n',  
+     yaxt='n', axes=F, box=F, add = TRUE)  
+#plot(countriesLow, add=TRUE)
+lon <- countriesNodes$lon
+lat <- countriesNodes$lat
+    
+plot(g, vertex.size = 70, layout = cbind(lon,lat), add = TRUE, rescale = FALSE, 
+     edge.arrow.size = 0.01, vertex.label.cex = 0.01, vertex.label.color = 'black', 
+     edge.curved = TRUE, edge.col ='black', vertex.color = 'red', edge.color = 'blue')
+```
+
+# Plot pie network on map
+
+```{r, fig.width=14, fig.height=8, dpi=80}
+
+#----------------------------------------------------------
+reduce_nodes_to_focus <- function(startmat, maxdist, keynodes, tofrom){
+  
+  #library(igraph) #Xing
+  # make a version of the starting adjacency matrix as
+  #   an igraph adjacency matrix
+  #startmati <- graph_from_adjacency_matrix(j) #Xing made change
+  startmati <- startmat  # Xing added
+  
+  # construct matrix of distances between nodes
+  #  (in number of steps)
+  distmat <- distances(startmati, mode="out")
+
+  # construct matrix of indicators for whether the distance
+  #	between node pairs is <= the maximum distance being
+  #	considered
+  distmat2 <- (distmat <= maxdist) * 1
+
+  # obtain the rows of the matrix corresponding to movement
+  #   FROM the key nodes and TO the key nodes
+  distmat2FROM <- distmat2[keynodes,,drop=F]
+  distmat2TO <- distmat2[,keynodes,drop=F]
+
+  # determine which nodes to keep based on movement 
+  #   FROM key nodes and TO key nodes
+  keepersFROM <- apply(distmat2FROM,2,sum)
+  keepersTO <- apply(distmat2TO,1,sum)
+
+  # if only considering the nodes on paths FROM the key nodes,
+  #   these are the nodes to keep
+  if (tofrom == 'from'){
+    keepers <- keepersFROM > 0
+  
+  # if only considering the nodes on paths TO the key nodes,
+  #   these are the nodes to keep
+  } else if (tofrom == 'to'){
+    keepers <- keepersTO > 0
+  
+  # if consider either from or to the key nodes,
+  #   these are the nodes to keep
+  } else if (tofrom == 'either'){
+    keeperseither <- keepersTO + keepersFROM
+    keepers <- keeperseither > 0
+  }
+  
+  # make output matrix with only those nodes close enough to 
+  #   key nodes
+  outmat <- startmat[keepers,keepers,drop=F]
+
+  list(outmat=outmat,keepers=keepers)
+
+}
+#----------------------------------------------------------
+
+Multi_country_nodesID <- which(countriesNodes$country %in% c("Kenya", "Uganda", "United Republic of Tanzania",
+                                                             "Rwanda", "Burundi", "Democratic Republic of the Congo") == TRUE)
+jnames <- as.character(countriesNodes$country)
+
+
+jout <- reduce_nodes_to_focus(startmat= g, maxdist= 1, keynodes= Multi_country_nodesID, tofrom='either')
+
+jouti <- graph_from_adjacency_matrix(jout$outmat)
+V(jouti)$names <- jnames[jout$keepers]
+iso3_id <- which(jout$keepers ==  TRUE)
+iso3_Names <- jnames[iso3_id]
+
+
+
+Geo_ALL <- cbind(lon,lat)
+Geo_sub1 <- Geo_ALL[iso3_id, ]
+plot(jouti, vertex.label=iso3_Names, layout = Geo_sub1, vertex.color='light green', main='1 steps or less FROM or TO key nodes of 6 countries',
+     vertex.size = 3,  add= FALSE, rescale= TRUE, edge.curved = TRUE, 
+     edge.arrow.size=.6, vertex.label.cex = 1, 
+     vertex.label.dist = 0.7, edge.color = "blue", edge.width = 0.9)
+#--------------------------------
+# Disease data
+#1a
+PcystNematode <- read.csv("1 Globodera pallida white potato cyst nematode.csv")
+#PcystNematode$Region %in% countriesNodes$country
+Country_PCN_silver_ID <- which(countriesNodes$country %in% PcystNematode$Region)
+
+#1b
+PcystNematode_gold <- read.csv("1 Globodera rostochiensis-yellow potato cyst nematode.csv")
+#pp <- PcystNematode_gold$Region %in% countriesNodes$country
+#PPI<-which(pp == FALSE)
+#PcystNematode_gold$Region[PPI]
+Country_PCN_gold_ID <- which(countriesNodes$country %in% PcystNematode_gold$Region)
+
+#2
+PVirus_X <- read.csv("2 Potato virus X potato interveinal mosaic.csv")
+#pp <- PVirus_X$Region %in% countriesNodes$country
+Country_PVX_ID <- which(countriesNodes$country %in% PVirus_X$Region)
+
+#3
+PVirus_Y <- read.csv("3 Potato virus Y potato mottle.csv")
+#pp <- PVirus_Y$Region %in% countriesNodes$country
+Country_PVY_ID <- which(countriesNodes$country %in% PVirus_Y$Region)
+
+#4
+PLR_V <- read.csv("4 Potato leafroll virus.csv")
+#pp <- PLR_V$Region %in% countriesNodes$country
+Country_PLR_ID <- which(countriesNodes$country %in% PLR_V$Region)
+
+#5
+PSR_3 <- read.csv("5 Ralstonia solanacearum race 3 brown rot of potato.csv")
+#pp <- PSR_3$Region %in% countriesNodes$country
+#PSR_3$Region[pp == FALSE]
+Country_PSR3_ID <- which(countriesNodes$country %in% PSR_3$Region)
+
+#6
+PIPB <- read.csv("6 Phytophthora infestans Phytophthora blight.csv")
+#pp <- PIPB$Region %in% countriesNodes$country
+#PIPB$Region[pp == FALSE]
+Country_PIPB_ID <- which(countriesNodes$country %in% PIPB$Region)
+
+#----------------------------------------------------------
+# Pie network
+PieNode_N <- rep(0, dim(countriesNodes)[1])
+
+PCN_silver <- PieNode_N
+PCN_silver[Country_PCN_silver_ID] <-1
+
+PCN_gold <- PieNode_N
+PCN_gold[Country_PCN_gold_ID] <- 1
+
+PVX <- PieNode_N
+PVX[Country_PVX_ID] <- 1
+
+PVY <- PieNode_N
+PVY[Country_PVY_ID] <- 1
+
+PLR <- PieNode_N
+PLR[Country_PLR_ID] <- 1
+
+PSR3 <- PieNode_N
+PSR3[Country_PSR3_ID] <- 1
+
+PIPB <- PieNode_N
+PIPB[Country_PIPB_ID] <- 1
+
+disea_data <- data.frame(PCN_silver, PCN_gold, PVX, PVY, PLR, PSR3, PIPB)
+disea_sum <- apply(disea_data, 1, sum)
+no_disea <- which(disea_sum == 0)
+disea_sum[no_disea] <- 1
+
+disea_pie <- disea_data/disea_sum
+
+absent <- PieNode_N
+absent[] <- 1
+absent <- absent - apply(disea_pie, 1, sum)
+  
+disea_pie <- data.frame(disea_pie, absent)
+disea_pie <- as.matrix(disea_pie) # # the pie proportion data should be a matrix or array, if it is a data frame it may have some error, or not possible to plot.
+#disea_pie <- as.numeric(disea_pie)
+#--------
+VD_color <- colnames(disea_pie)
+VD_color[c(6,7)] <- c("RS_race3", "P_infestans")
+
+#--------------------------
+PieValue <- NULL
+
+for (i in 1:length(absent)) {
+  PieValue[i] <- list(disea_pie[i, ])
+}
+
+PieColor <- list(c("#FDB42FFF", "#F68F44FF", "#E3685FFF", 
+                   "#CD4A76FF", "#B93289FF", "#8405A7FF",
+                   "#43039EFF", "light blue"))
+
+plot(g, vertex.size = 6,layout = cbind(lon,lat), vertex.label.cex = 0.005,
+     vertex.shape = "pie", vertex.pie = PieValue, vertex.pie.color = PieColor, edge.arrow.size = 0.01, edge.curved = TRUE) 
+
+legend(-2, 0.2, 
+       inset = 0,
+       box.col = NA,
+       legend = VD_color,
+       col =  "black",
+       pt.bg = c("#FDB42FFF", "#F68F44FF", "#E3685FFF", 
+                   "#CD4A76FF", "#B93289FF", "#8405A7FF",
+                   "#43039EFF", "light blue"),
+       pch = 22,
+       pt.cex = 3,
+       cex = 1.2,
+       title = "Disease and pest",
+       text.col = "black"
+       )
+
+#-------------------------------------------
+
+
+#--------------------------------------------------
+
+disea_pie_B <- disea_pie[iso3_id, ]
+PieValue_B <- NULL
+
+for (i in 1:dim(disea_pie_B)[1]) {
+  PieValue_B[i] <- list(disea_pie_B[i, ])
+}
+
+
+#---------------------------
+plot(map_grey_background, col = "grey75",  xaxt='n',  yaxt='n', axes=F, box=F, legend = F,
+          main=paste('1 steps or less FROM or TO key nodes of 6 countries FAO 2015-2019'), cex.main=1.9)
+plot(bananaPlantain, col = colPalletNew, zlim= c(0.000000000001, 1), xaxt='n',  
+     yaxt='n', axes=F, box=F, add = TRUE)  
+plot(countriesLow, add=TRUE, border = "white")
+
+plot(jouti, vertex.label=iso3_Names, layout = Geo_sub1, vertex.pie.color = PieColor,
+     vertex.shape = "pie", vertex.pie = PieValue_B,
+     vertex.size = 600,  add= TRUE, rescale= FALSE, edge.curved = TRUE, 
+     edge.arrow.size=.01, vertex.label.cex = 0.0005, 
+     vertex.label.dist = -1, edge.color = "blue", edge.width = 0.5) # Add network to map, should assign rescale = FALSE,
+
+
+legend(-165.5, 15,
+       inset = 0,
+       box.col = NA,
+       legend = VD_color,
+       col =  "black",
+       pt.bg = c("#FDB42FFF", "#F68F44FF", "#E3685FFF", 
+                   "#CD4A76FF", "#B93289FF", "#8405A7FF",
+                   "#43039EFF", "light blue"),
+       pch = 22,
+       pt.cex = 3.0,
+       cex = 1.3,
+       title = "Disease and pest",
+       text.col = "black"
+       )
+
+```
+
